@@ -2,11 +2,11 @@ name: Daily YouTube Videos
 
 on:
   schedule:
-    - cron: '0 0 * * *'
-    - cron: '0 1 * * *'
-    - cron: '0 2 * * *'
-    - cron: '0 3 * * *'
-    - cron: '0 4 * * *'
+    - cron: '0 0 * * *'   # 3:00 صباحاً السعودية
+    - cron: '0 1 * * *'   # 4:00 صباحاً
+    - cron: '0 2 * * *'   # 5:00 صباحاً
+    - cron: '0 3 * * *'   # 6:00 صباحاً
+    - cron: '0 4 * * *'   # 7:00 صباحاً
   workflow_dispatch:
 
 jobs:
@@ -26,20 +26,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick
 
-      - name: Show Python and pip info
+      - name: Install Python dependencies with force
         run: |
-          which python
-          python --version
-          which pip
-          pip --version
-          pip list
-
-      - name: Install Python dependencies (verbose)
-        run: |
-          pip install --upgrade pip setuptools wheel
-          pip install --verbose moviepy imageio-ffmpeg
-          pip install --verbose openai pexels-api gtts google-auth google-auth-oauthlib google-api-python-client requests
-          pip list | grep moviepy
+          python -m pip install --upgrade pip
+          python -m pip install --force-reinstall moviepy imageio-ffmpeg
+          python -m pip install openai pexels-api gtts google-auth google-auth-oauthlib google-api-python-client requests
+          python -c "import moviepy.editor; print('moviepy installed successfully')" || exit 1
 
       - name: Decode secrets
         env:
@@ -48,9 +40,6 @@ jobs:
         run: |
           echo "$CLIENT_SECRETS_B64" | base64 --decode > client_secrets.json
           echo "$TOKEN_B64" | base64 --decode > token.json
-
-      - name: Test import moviepy
-        run: python -c "import moviepy.editor; print('moviepy imported successfully')"
 
       - name: Run generator
         env:
