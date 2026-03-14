@@ -4,14 +4,15 @@ import subprocess
 import requests
 from gtts import gTTS
 import openai
-from pexels_api import PexelsAPI
+from pexels_api import API  # ✅ التصحيح: استيراد API بدلاً من PexelsAPI
 
 class VideoGenerator:
     def __init__(self):
         self.openai_key = os.environ.get('OPENAI_API_KEY')
         self.pexels_key = os.environ.get('PEXELS_API_KEY')
         openai.api_key = self.openai_key
-        self.pexels = PexelsAPI(self.pexels_key)
+        # ✅ إنشاء كائن API بالمفتاح
+        self.pexels = API(self.pexels_key)
     
     def generate_script_and_title(self, topic):
         prompt = f"""
@@ -43,14 +44,13 @@ class VideoGenerator:
             return f"Mindset Shift: {topic}", f"Did you know that {topic} can change your life? Subscribe for more."
     
     def search_pexels_video(self, query="dark night sky"):
-        videos = self.pexels.search_videos({
-            "query": query,
-            "per_page": 20,
-            "orientation": "portrait",
-            "size": "medium"
-        })
-        if videos and len(videos) > 0:
-            video = random.choice(videos)
+        # ✅ استخدام الدالة الصحيحة من المكتبة
+        self.pexels.search_videos(query, page=1, results_per_page=20)
+        videos_data = self.pexels.get_entries()  # هذه ترجع قائمة بكائنات الفيديو
+        
+        if videos_data and len(videos_data) > 0:
+            video = random.choice(videos_data)
+            # البحث عن ملف بجودة HD
             for file in video.video_files:
                 if file.quality == "hd" and file.width >= 720:
                     return file.link
