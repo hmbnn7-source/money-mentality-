@@ -4,14 +4,13 @@ import subprocess
 import requests
 from gtts import gTTS
 import openai
-from pexels_api import API  # ✅ التصحيح: استيراد API بدلاً من PexelsAPI
+from pexels_api import API
 
 class VideoGenerator:
     def __init__(self):
         self.openai_key = os.environ.get('OPENAI_API_KEY')
         self.pexels_key = os.environ.get('PEXELS_API_KEY')
-        openai.api_key = self.openai_key
-        # ✅ إنشاء كائن API بالمفتاح
+        self.client = openai.OpenAI(api_key=self.openai_key)  # الطريقة الجديدة
         self.pexels = API(self.pexels_key)
     
     def generate_script_and_title(self, topic):
@@ -28,7 +27,7 @@ class VideoGenerator:
         SCRIPT: [your script here]
         """
         try:
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(  # الطريقة الجديدة
                 model="gpt-3.5-turbo",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=200,
@@ -44,9 +43,14 @@ class VideoGenerator:
             return f"Mindset Shift: {topic}", f"Did you know that {topic} can change your life? Subscribe for more."
     
     def search_pexels_video(self, query="dark night sky"):
-        # ✅ استخدام الدالة الصحيحة من المكتبة
-        self.pexels.search_videos(query, page=1, results_per_page=20)
-        videos_data = self.pexels.get_entries()  # هذه ترجع قائمة بكائنات الفيديو
+        try:
+            # البحث عن فيديوهات باستخدام المكتبة
+            self.pexels.search(query, per_page=20)
+            videos_data = self.pexels.get_entries()  # هذه ترجع قائمة بكائنات الفيديو
+        except AttributeError:
+            # إذا لم تنجح الطريقة، نستخدم طريقة بديلة (قد تختلف حسب الإصدار)
+            self.pexels.search_videos(query, page=1, results_per_page=20)
+            videos_data = self.pexels.get_entries()
         
         if videos_data and len(videos_data) > 0:
             video = random.choice(videos_data)
