@@ -14,9 +14,6 @@ class VideoGenerator:
         self.pexels = PexelsAPI(self.pexels_key)
     
     def generate_script_and_title(self, topic):
-        """
-        توليد عنوان ونص فيديو من ChatGPT (60 كلمة بالضبط)
-        """
         prompt = f"""
         You are a YouTube Shorts creator. Generate a video title and script about "{topic}" in American English.
         
@@ -37,7 +34,6 @@ class VideoGenerator:
                 temperature=0.8
             )
             content = response.choices[0].message.content.strip()
-            # استخراج العنوان والنص
             lines = content.split('\n')
             title = lines[0].replace('TITLE:', '').strip()
             script = '\n'.join(lines[1:]).replace('SCRIPT:', '').strip()
@@ -47,7 +43,6 @@ class VideoGenerator:
             return f"Mindset Shift: {topic}", f"Did you know that {topic} can change your life? Subscribe for more."
     
     def search_pexels_video(self, query="dark night sky"):
-        """البحث عن فيديو في Pexels"""
         videos = self.pexels.search_videos({
             "query": query,
             "per_page": 20,
@@ -62,7 +57,6 @@ class VideoGenerator:
         return None
     
     def create_video(self, script, video_url, output_path):
-        """دمج الصوت والفيديو"""
         # صوت
         audio = gTTS(text=script, lang='en', slow=False)
         audio_file = "/tmp/audio.mp3"
