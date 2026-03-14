@@ -1,8 +1,8 @@
 import os
 import random
+import subprocess
 import requests
 from gtts import gTTS
-from moviepy.editor import *
 import openai
 from pexels_api import PexelsAPI
 
@@ -57,32 +57,40 @@ class VideoGenerator:
         return None
     
     def create_video(self, script, video_url, output_path):
-        # صوت
-        audio = gTTS(text=script, lang='en', slow=False)
+        # 1. توليد الصوت باستخدام gTTS
         audio_file = "/tmp/audio.mp3"
-        audio.save(audio_file)
+        tts = gTTS(text=script, lang='en', slow=False)
+        tts.save(audio_file)
         
-        # فيديو
+        # 2. تحميل الفيديو
         video_file = "/tmp/video.mp4"
         r = requests.get(video_url, stream=True)
         with open(video_file, 'wb') as f:
             for chunk in r.iter_content(1024):
                 f.write(chunk)
         
-        # دمج
-        audio_clip = AudioFileClip(audio_file)
-        video_clip = VideoFileClip(video_file).without_audio()
+        # 3. الحصول على مدة الصوت
+        audio_duration_cmd = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{audio_file}"'
+        audio_duration = float(subprocess.check_output(audio_duration_cmd, shell=True).decode().strip())
         
-        if video_clip.duration < audio_clip.duration:
-            video_clip = video_clip.loop(duration=audio_clip.duration)
-        else:
-            video_clip = video_clip.subclip(0, audio_clip.duration)
+        # 4. قص/تمديد الفيديو ليتناسب مع مدة الصوت
+        temp_video = "/tmp/video_trimmed.mp4"
+        trim_cmd = f'ffmpeg -i "{video_file}" -t {audio_duration} -c copy "{temp_video}" -y'
+        subprocess.run(trim_cmd, shell=True, check=True)
         
-        video_clip = video_clip.resize(height=1920).crop(x_center=video_clip.w/2, width=1080, height=1920)
+        # 5. تغيير الحجم إلى 1080x1920 (عمودي)
+        final_video = "/tmp/video_resized.mp4"
+        resize_cmd = f'ffmpeg -i "{temp_video}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:a copy "{final_video}" -y'
+        subprocess.run(resize_cmd, shell=True, check=True)
         
-        final = video_clip.set_audio(audio_clip)
-        final.write_videofile(output_path, codec='libx264', audio_codec='aac')
+        # 6. دمج الصوت مع الفيديو
+        merge_cmd = f'ffmpeg -i "{final_video}" -i "{audio_file}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "{output_path}" -y'
+        subprocess.run(merge_cmd, shell=True, check=True)
         
+        # 7. تنظيف الملفات المؤقتة
         os.remove(audio_file)
         os.remove(video_file)
+        os.remove(temp_video)
+        os.remove(final_video)
+        
         return output_path
