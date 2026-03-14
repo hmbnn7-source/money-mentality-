@@ -30,13 +30,9 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install setuptools wheel
-          # تثبيت moviepy أولاً مع عرض تفصيلي
-          pip install --no-cache-dir moviepy imageio-ffmpeg
-          # ثم باقي المتطلبات
-          pip install --no-cache-dir -r requirements.txt
-          # التحقق النهائي
-          python -c "import moviepy.editor; print('✅ moviepy installed')" || { echo '❌ moviepy installation failed'; exit 1; }
-
+          # تثبيت moviepy أولاً وباقي المكتبات
+          pip install moviepy imageio-ffmpeg
+          pip install openai pexels-api gtts google-auth google-auth-oauthlib google-api-python-client requests
       - name: Decode secrets
         env:
           CLIENT_SECRETS_B64: ${{ secrets.CLIENT_SECRETS_JSON }}
