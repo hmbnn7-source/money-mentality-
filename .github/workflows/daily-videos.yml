@@ -52,3 +52,9 @@ jobs:
           name: execution-logs
           path: /tmp/video_*.mp4
           retention-days: 1
+
+      - name: Test decode secrets
+        run: |
+          echo "Testing CLIENT_SECRETS_JSON length: ${#CLIENT_SECRETS_B64}"
+          echo "$CLIENT_SECRETS_B64" | head -c 50
+          echo "$CLIENT_SECRETS_B64" | base64 --decode 2>&1 | head -c 100 || true
