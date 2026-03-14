@@ -28,6 +28,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
+      - name: Verify installed packages
+        run: pip list
+          
       - name: Decode secrets
         env:
           CLIENT_SECRETS_B64: ${{ secrets.CLIENT_SECRETS_JSON }}
