@@ -1,7 +1,5 @@
 openai
 pexels-api
-moviepy
-imageio-ffmpeg
 gtts
 google-auth
 google-auth-oauthlib
