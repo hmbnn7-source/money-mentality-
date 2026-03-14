@@ -1,0 +1,11 @@
+# الملفات الحساسة
+client_secrets.json
+token.json
+
+# ملفات بايثون المؤقتة
+__pycache__/
+*.pyc
+
+# ملفات النظام
+Thumbs.db
+.DS_Store

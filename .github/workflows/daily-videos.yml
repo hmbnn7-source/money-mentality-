@@ -1,0 +1,51 @@
+name: Daily YouTube Videos
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 3:00 صباحاً السعودية (00:00 UTC)
+    - cron: '0 1 * * *'   # 4:00 صباحاً
+    - cron: '0 2 * * *'   # 5:00 صباحاً
+    - cron: '0 3 * * *'   # 6:00 صباحاً
+    - cron: '0 4 * * *'   # 7:00 صباحاً
+  workflow_dispatch:        # للتشغيل اليدوي
+
+jobs:
+  generate-videos:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Decode secrets
+        env:
+          CLIENT_SECRETS_B64: ${{ secrets.CLIENT_SECRETS_JSON }}
+          TOKEN_B64: ${{ secrets.TOKEN_JSON }}
+        run: |
+          echo "$CLIENT_SECRETS_B64" | base64 --decode > client_secrets.json
+          echo "$TOKEN_B64" | base64 --decode > token.json
+
+      - name: Run generator
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+        run: python scripts/run_batch.py
+
+      - name: Upload logs (optional)
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: execution-logs
+          path: /tmp/video_*.mp4
+          retention-days: 1
