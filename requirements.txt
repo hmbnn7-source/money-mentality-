@@ -1,7 +1,10 @@
 openai
-pexels-api
 gtts
 google-auth
 google-auth-oauthlib
 google-api-python-client
 requests
+pexels-api
+openai-whisper
+torch
+elevenlabs
