@@ -43,10 +43,12 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          VOICE_ID: ${{ secrets.VOICE_ID }}  # اختياري، يمكنك تعيين قيمة افتراضية في الكود
           CLIENT_SECRETS_JSON: ${{ secrets.CLIENT_SECRETS_JSON }}
           TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
         run: python scripts/run_batch.py
-
+        
       - name: Upload logs (optional)
         if: always()
         uses: actions/upload-artifact@v4
