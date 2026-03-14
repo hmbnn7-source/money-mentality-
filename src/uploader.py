@@ -8,7 +8,6 @@ from google.auth.transport.requests import Request
 
 class YouTubeUploader:
     def __init__(self):
-        # فك تشفير الـ secrets القادمة من GitHub
         client_secrets_json = base64.b64decode(
             os.environ.get('CLIENT_SECRETS_JSON', '')
         ).decode('utf-8')
