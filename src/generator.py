@@ -73,12 +73,12 @@ class VideoGenerator:
         audio_duration_cmd = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{audio_file}"'
         audio_duration = float(subprocess.check_output(audio_duration_cmd, shell=True).decode().strip())
         
-        # 4. قص الفيديو ليتناسب مع مدة الصوت
+        # 4. قص الفيديو ليناسب مدة الصوت
         temp_video = "/tmp/video_trimmed.mp4"
         trim_cmd = f'ffmpeg -i "{video_file}" -t {audio_duration} -c copy "{temp_video}" -y'
         subprocess.run(trim_cmd, shell=True, check=True)
         
-        # 5. تغيير الحجم إلى 1080x1920
+        # 5. تغيير الحجم إلى 1080x1920 (عمودي)
         final_video = "/tmp/video_resized.mp4"
         resize_cmd = f'ffmpeg -i "{temp_video}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:a copy "{final_video}" -y'
         subprocess.run(resize_cmd, shell=True, check=True)
@@ -87,7 +87,7 @@ class VideoGenerator:
         merge_cmd = f'ffmpeg -i "{final_video}" -i "{audio_file}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "{output_path}" -y'
         subprocess.run(merge_cmd, shell=True, check=True)
         
-        # 7. تنظيف
+        # 7. تنظيف الملفات المؤقتة
         os.remove(audio_file)
         os.remove(video_file)
         os.remove(temp_video)
