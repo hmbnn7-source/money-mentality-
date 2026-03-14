@@ -4,9 +4,8 @@ import subprocess
 import requests
 import openai
 import whisper
-from elevenlabs import generate, set_api_key
-import json
-import time
+from elevenlabs.client import ElevenLabs  # ✅ الاستيراد الصحيح للإصدار الجديد
+from elevenlabs import Voice, VoiceSettings
 
 class VideoGenerator:
     def __init__(self):
@@ -15,21 +14,12 @@ class VideoGenerator:
         self.elevenlabs_key = os.environ.get('ELEVENLABS_API_KEY')
         self.voice_id = os.environ.get('VOICE_ID', '21m00Tcm4TlvDq8ikWAM')  # صوت افتراضي
         
-        if not self.openai_key:
-            raise ValueError("Missing OPENAI_API_KEY")
-        if not self.pexels_key:
-            raise ValueError("Missing PEXELS_API_KEY")
-        if not self.elevenlabs_key:
-            raise ValueError("Missing ELEVENLABS_API_KEY")
-        
         openai.api_key = self.openai_key
-        set_api_key(self.elevenlabs_key)
         self.client = openai.OpenAI(api_key=self.openai_key)
-        
-        # تحميل نموذج whisper
-        print("Loading Whisper model...")
         self.whisper_model = whisper.load_model("base")
-        print("Whisper model loaded.")
+        
+        # ✅ إنشاء عميل ElevenLabs بالطريقة الجديدة
+        self.eleven_client = ElevenLabs(api_key=self.elevenlabs_key)
     
     def generate_script_and_title(self, topic):
         prompt = f"""
@@ -54,33 +44,37 @@ class VideoGenerator:
                 temperature=0.8
             )
             script = response.choices[0].message.content.strip()
-            # توليد عنوان بسيط من أول كلمات النص
             title = script.split('.')[0][:60] + " | Money Mentality"
-            print(f"Generated script: {script[:50]}...")
             return title, script
         except Exception as e:
             print(f"OpenAI error: {e}")
             return f"Mindset Shift: {topic}", f"Did you know that {topic} can change your life? Subscribe for more."
     
     def text_to_speech_elevenlabs(self, text, output_path):
-        """تحويل النص إلى صوت باستخدام ElevenLabs"""
+        """تحويل النص إلى صوت باستخدام ElevenLabs API (الإصدار الجديد)"""
         try:
-            print(f"Generating audio with ElevenLabs using voice {self.voice_id}...")
-            audio = generate(
+            # ✅ استخدام الطريقة الجديدة client.text_to_speech.convert
+            response = self.eleven_client.text_to_speech.convert(
+                voice_id=self.voice_id,
+                output_format="mp3_44100_128",  # تنسيق الصوت المطلوب
                 text=text,
-                voice=self.voice_id,
-                model="eleven_monolingual_v1"
+                model_id="eleven_monolingual_v1",
+                voice_settings=VoiceSettings(
+                    stability=0.5,
+                    similarity_boost=0.5
+                )
             )
+            
+            # ✅ تحويل الاستجابة إلى بايتات وحفظها
             with open(output_path, 'wb') as f:
-                f.write(audio)
-            print(f"Audio saved to {output_path}")
+                for chunk in response:  # الاستجابة قد تكون iterator
+                    f.write(chunk)
             return True
         except Exception as e:
             print(f"ElevenLabs error: {e}")
             return False
     
     def search_pexels_video(self, query="city at night"):
-        """البحث عن فيديو في Pexels"""
         url = "https://api.pexels.com/videos/search"
         headers = {"Authorization": self.pexels_key}
         params = {
@@ -90,40 +84,30 @@ class VideoGenerator:
             "size": "medium"
         }
         try:
-            print(f"Searching Pexels for: {query}")
             response = requests.get(url, headers=headers, params=params)
             response.raise_for_status()
             data = response.json()
             videos = data.get("videos", [])
-            if not videos:
-                print("No videos found.")
-                return None
-            video = random.choice(videos)
-            for file in video.get("video_files", []):
-                if file.get("quality") == "hd" and file.get("width", 0) >= 720:
-                    link = file.get("link")
-                    print(f"Found video: {link}")
-                    return link
-            print("No suitable HD video found.")
-            return None
+            if videos:
+                video = random.choice(videos)
+                for file in video.get("video_files", []):
+                    if file.get("quality") == "hd" and file.get("width", 0) >= 720:
+                        return file.get("link")
         except Exception as e:
             print(f"Pexels API error: {e}")
-            return None
+        return None
     
     def create_subtitle_file(self, segments, output_srt):
-        """إنشاء ملف ترجمة SRT من مقاطع Whisper"""
         with open(output_srt, 'w', encoding='utf-8') as f:
             for i, seg in enumerate(segments):
                 start = seg['start']
                 end = seg['end']
                 text = seg['text'].strip()
                 f.write(f"{i+1}\n")
-                f.write(f"{self._format_time(start)} --> {self._format_time(end)}\n")
+                f.write(f"{self.format_time(start)} --> {self.format_time(end)}\n")
                 f.write(f"{text}\n\n")
-        print(f"SRT file created: {output_srt}")
     
-    def _format_time(self, seconds):
-        """تحويل الثواني إلى تنسيق SRT (hh:mm:ss,ms)"""
+    def format_time(self, seconds):
         h = int(seconds // 3600)
         m = int((seconds % 3600) // 60)
         s = int(seconds % 60)
@@ -141,60 +125,50 @@ class VideoGenerator:
         
         # 2. تحميل الفيديو
         video_file = "/tmp/video.mp4"
-        print(f"Downloading video from {video_url}...")
         r = requests.get(video_url, stream=True)
         with open(video_file, 'wb') as f:
             for chunk in r.iter_content(1024):
                 f.write(chunk)
-        print("Video downloaded.")
         
         # 3. الحصول على مدة الصوت
         audio_duration_cmd = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{audio_file}"'
         audio_duration = float(subprocess.check_output(audio_duration_cmd, shell=True).decode().strip())
-        print(f"Audio duration: {audio_duration}s")
         
         # 4. قص الفيديو ليناسب مدة الصوت
         temp_video = "/tmp/video_trimmed.mp4"
         trim_cmd = f'ffmpeg -i "{video_file}" -t {audio_duration} -c copy "{temp_video}" -y'
         subprocess.run(trim_cmd, shell=True, check=True)
-        print("Video trimmed.")
         
         # 5. تغيير الحجم إلى 1080x1920 (عمودي)
         resized_video = "/tmp/video_resized.mp4"
         resize_cmd = f'ffmpeg -i "{temp_video}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:a copy "{resized_video}" -y'
         subprocess.run(resize_cmd, shell=True, check=True)
-        print("Video resized.")
         
-        # 6. استخراج الترجمة من الصوت باستخدام Whisper
+        # 6. استخراج الترجمة من الصوت
         print("Transcribing audio with Whisper...")
         result = self.whisper_model.transcribe(audio_file)
         segments = result['segments']
-        print(f"Transcription completed. Found {len(segments)} segments.")
         
         # 7. إنشاء ملف ترجمة SRT
         srt_file = "/tmp/subtitles.srt"
         self.create_subtitle_file(segments, srt_file)
         
-        # 8. دمج الترجمة مع الفيديو (حرقها)
+        # 8. دمج الترجمة مع الفيديو
         video_with_subs = "/tmp/video_with_subs.mp4"
         subs_cmd = f'ffmpeg -i "{resized_video}" -vf "subtitles={srt_file}" -c:a copy "{video_with_subs}" -y'
         subprocess.run(subs_cmd, shell=True, check=True)
-        print("Subtitles added to video.")
         
-        # 9. دمج الصوت مع الفيديو (بعد إضافة الترجمة)
+        # 9. دمج الصوت مع الفيديو
         final_video = "/tmp/video_final.mp4"
         merge_cmd = f'ffmpeg -i "{video_with_subs}" -i "{audio_file}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "{final_video}" -y'
         subprocess.run(merge_cmd, shell=True, check=True)
-        print("Audio merged.")
         
-        # 10. نسخ الناتج النهائي إلى المسار المطلوب
+        # 10. نسخ الناتج النهائي
         subprocess.run(f'cp "{final_video}" "{output_path}"', shell=True, check=True)
-        print(f"Final video saved to {output_path}")
         
         # 11. تنظيف الملفات المؤقتة
         for f in [audio_file, video_file, temp_video, resized_video, video_with_subs, final_video, srt_file]:
             if os.path.exists(f):
                 os.remove(f)
-                print(f"Removed temporary file: {f}")
         
         return output_path
