@@ -2,11 +2,11 @@ name: Daily YouTube Videos
 
 on:
   schedule:
-    - cron: '0 0 * * *'
-    - cron: '0 1 * * *'
-    - cron: '0 2 * * *'
-    - cron: '0 3 * * *'
-    - cron: '0 4 * * *'
+    - cron: '0 0 * * *'   # 3:00 صباحاً السعودية
+    - cron: '0 1 * * *'   # 4:00 صباحاً
+    - cron: '0 2 * * *'   # 5:00 صباحاً
+    - cron: '0 3 * * *'   # 6:00 صباحاً
+    - cron: '0 4 * * *'   # 7:00 صباحاً
   workflow_dispatch:
 
 jobs:
@@ -26,16 +26,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg imagemagick
 
-      - name: Show requirements.txt
-        run: cat requirements.txt
-
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install setuptools wheel
-          pip install moviepy  # تثبيت مباشر
-          pip install -r requirements.txt
-          pip list | grep moviepy
+          # تثبيت المكتبات مع عرض تفاصيل
+          pip install --no-cache-dir moviepy imageio-ffmpeg
+          pip install --no-cache-dir -r requirements.txt
+          # التحقق من التثبيت
+          python -c "import moviepy.editor; print('✅ moviepy installed successfully')" || { echo '❌ moviepy installation failed'; exit 1; }
 
       - name: Decode secrets
         env:
