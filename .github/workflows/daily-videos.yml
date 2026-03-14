@@ -30,11 +30,12 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install setuptools wheel
-          # تثبيت المكتبات مع عرض تفاصيل
+          # تثبيت moviepy أولاً مع عرض تفصيلي
           pip install --no-cache-dir moviepy imageio-ffmpeg
+          # ثم باقي المتطلبات
           pip install --no-cache-dir -r requirements.txt
-          # التحقق من التثبيت
-          python -c "import moviepy.editor; print('✅ moviepy installed successfully')" || { echo '❌ moviepy installation failed'; exit 1; }
+          # التحقق النهائي
+          python -c "import moviepy.editor; print('✅ moviepy installed')" || { echo '❌ moviepy installation failed'; exit 1; }
 
       - name: Decode secrets
         env:
