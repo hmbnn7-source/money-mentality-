@@ -6,6 +6,7 @@ import openai
 import whisper
 from elevenlabs.client import ElevenLabs
 from elevenlabs import Voice, VoiceSettings
+import math
 
 class VideoGenerator:
     def __init__(self):
@@ -148,7 +149,15 @@ class VideoGenerator:
         ms = int((seconds - int(seconds)) * 1000)
         return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
     
+    def download_video(self, url, output_path):
+        """تحميل فيديو من رابط وحفظه في المسار المحدد"""
+        r = requests.get(url, stream=True)
+        with open(output_path, 'wb') as f:
+            for chunk in r.iter_content(1024):
+                f.write(chunk)
+    
     def create_video(self, script, video_url, output_path):
+        # 1. توليد الصوت باستخدام ElevenLabs
         audio_file = "/tmp/audio.mp3"
         if not self.text_to_speech_elevenlabs(script, audio_file):
             print("ElevenLabs failed, using gTTS fallback")
@@ -156,41 +165,89 @@ class VideoGenerator:
             tts = gTTS(text=script, lang='en', slow=False)
             tts.save(audio_file)
         
-        video_file = "/tmp/video.mp4"
-        r = requests.get(video_url, stream=True)
-        with open(video_file, 'wb') as f:
-            for chunk in r.iter_content(1024):
-                f.write(chunk)
-        
+        # 2. الحصول على مدة الصوت
         audio_duration_cmd = f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{audio_file}"'
         audio_duration = float(subprocess.check_output(audio_duration_cmd, shell=True).decode().strip())
         
-        temp_video = "/tmp/video_trimmed.mp4"
-        trim_cmd = f'ffmpeg -i "{video_file}" -t {audio_duration} -c copy "{temp_video}" -y'
-        subprocess.run(trim_cmd, shell=True, check=True)
+        # 3. تقسيم المدة إلى مقاطع كل 3 ثوانٍ
+        segment_duration = 3.0  # كل مقطع 3 ثوانٍ
+        num_segments = math.ceil(audio_duration / segment_duration)
+        segments = []
+        for i in range(num_segments):
+            start = i * segment_duration
+            end = min((i + 1) * segment_duration, audio_duration)
+            segments.append((start, end))
         
-        resized_video = "/tmp/video_resized.mp4"
-        resize_cmd = f'ffmpeg -i "{temp_video}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:a copy "{resized_video}" -y'
-        subprocess.run(resize_cmd, shell=True, check=True)
+        # 4. إنشاء فيديو لكل مقطع
+        video_segments = []
+        for idx, (seg_start, seg_end) in enumerate(segments):
+            seg_duration = seg_end - seg_start
+            # البحث عن فيديو لكل مقطع (نفس كلمة البحث)
+            video_url = self.search_pexels_video("city at night")
+            if not video_url:
+                # إذا فشل البحث، استخدم فيديو أسود
+                print(f"Warning: No video found for segment {idx+1}, using black background")
+                segment_video = f"/tmp/segment_{idx}.mp4"
+                black_cmd = f'ffmpeg -f lavfi -i color=c=black:s=1080x1920:d={seg_duration} -c:v libx264 "{segment_video}" -y'
+                subprocess.run(black_cmd, shell=True, check=True)
+                video_segments.append(segment_video)
+                continue
+            
+            # تحميل الفيديو
+            downloaded_video = f"/tmp/segment_video_{idx}.mp4"
+            self.download_video(video_url, downloaded_video)
+            
+            # قص الفيديو ليناسب المدة المطلوبة
+            trimmed_video = f"/tmp/segment_trimmed_{idx}.mp4"
+            trim_cmd = f'ffmpeg -i "{downloaded_video}" -t {seg_duration} -c copy "{trimmed_video}" -y'
+            subprocess.run(trim_cmd, shell=True, check=True)
+            
+            # تغيير الحجم إلى 1080x1920
+            resized_video = f"/tmp/segment_resized_{idx}.mp4"
+            resize_cmd = f'ffmpeg -i "{trimmed_video}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:a copy "{resized_video}" -y'
+            subprocess.run(resize_cmd, shell=True, check=True)
+            
+            video_segments.append(resized_video)
+            
+            # تنظيف الملفات المؤقتة لهذا المقطع
+            os.remove(downloaded_video)
+            os.remove(trimmed_video)
         
+        # 5. دمج جميع مقاطع الفيديو في ملف واحد
+        concat_file = "/tmp/concat_list.txt"
+        with open(concat_file, 'w') as f:
+            for v in video_segments:
+                f.write(f"file '{v}'\n")
+        
+        merged_video = "/tmp/video_merged.mp4"
+        concat_cmd = f'ffmpeg -f concat -safe 0 -i "{concat_file}" -c copy "{merged_video}" -y'
+        subprocess.run(concat_cmd, shell=True, check=True)
+        
+        # 6. استخراج الترجمة من الصوت
         print("Transcribing audio with Whisper...")
         result = self.whisper_model.transcribe(audio_file)
-        segments = result['segments']
+        transcribe_segments = result['segments']
         
+        # 7. إنشاء ملف ترجمة ASS
         ass_file = "/tmp/subtitles.ass"
-        self.create_ass_subtitle_file(segments, ass_file)
+        self.create_ass_subtitle_file(transcribe_segments, ass_file)
         
+        # 8. إضافة الترجمة إلى الفيديو المدمج
         video_with_subs = "/tmp/video_with_subs.mp4"
-        subs_cmd = f'ffmpeg -i "{resized_video}" -vf "ass={ass_file}" -c:a copy "{video_with_subs}" -y'
+        subs_cmd = f'ffmpeg -i "{merged_video}" -vf "ass={ass_file}" -c:a copy "{video_with_subs}" -y'
         subprocess.run(subs_cmd, shell=True, check=True)
         
+        # 9. دمج الصوت مع الفيديو
         final_video = "/tmp/video_final.mp4"
         merge_cmd = f'ffmpeg -i "{video_with_subs}" -i "{audio_file}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "{final_video}" -y'
         subprocess.run(merge_cmd, shell=True, check=True)
         
+        # 10. نسخ الناتج النهائي إلى المسار المطلوب
         subprocess.run(f'cp "{final_video}" "{output_path}"', shell=True, check=True)
         
-        for f in [audio_file, video_file, temp_video, resized_video, video_with_subs, final_video, ass_file]:
+        # 11. تنظيف جميع الملفات المؤقتة
+        temp_files = [audio_file, merged_video, video_with_subs, final_video, ass_file, concat_file] + video_segments
+        for f in temp_files:
             if os.path.exists(f):
                 os.remove(f)
         
