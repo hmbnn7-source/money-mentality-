@@ -28,12 +28,12 @@ TOPICS = [
 ]
 
 def main():
-    selected_topics = random.sample(TOPICS, 5)
+    selected_topics = random.sample(TOPICS, 1)
     generator = VideoGenerator()
     uploader = YouTubeUploader()
     
     for i, topic in enumerate(selected_topics):
-        print(f"\n🎬 [{i+1}/5] {topic}")
+        print(f"\n🎬 [{i+1}/1] {topic}")
         try:
             title, script = generator.generate_script_and_title(topic)
             print(f"📝 Title: {title}")
