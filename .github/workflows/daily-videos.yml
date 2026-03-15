@@ -2,11 +2,7 @@ name: Daily YouTube Videos
 
 on:
   schedule:
-    - cron: '0 0 * * *'   # 3:00 صباحاً السعودية
-    - cron: '0 1 * * *'   # 4:00 صباحاً
-    - cron: '0 2 * * *'   # 5:00 صباحاً
-    - cron: '0 3 * * *'   # 6:00 صباحاً
-    - cron: '0 4 * * *'   # 7:00 صباحاً
+    - cron: '0 10 * * *'   # 13:00 بتوقيت السعودية
   workflow_dispatch:
 
 jobs:
