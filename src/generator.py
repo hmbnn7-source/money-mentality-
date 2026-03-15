@@ -213,14 +213,15 @@ class VideoGenerator:
             os.remove(downloaded_video)
             os.remove(trimmed_video)
         
-        # 5. دمج جميع مقاطع الفيديو في ملف واحد
+                # 5. دمج جميع مقاطع الفيديو مع إعادة الترميز
         concat_file = "/tmp/concat_list.txt"
         with open(concat_file, 'w') as f:
             for v in video_segments:
                 f.write(f"file '{v}'\n")
         
         merged_video = "/tmp/video_merged.mp4"
-        concat_cmd = f'ffmpeg -f concat -safe 0 -i "{concat_file}" -c copy "{merged_video}" -y'
+        # استخدام concat مع إعادة الترميز لضمان سلاسة الانتقال
+        concat_cmd = f'ffmpeg -f concat -safe 0 -i "{concat_file}" -c:v libx264 -preset ultrafast -crf 23 -c:a aac -vf "format=yuv420p" "{merged_video}" -y'
         subprocess.run(concat_cmd, shell=True, check=True)
         
         # 6. استخراج الترجمة من الصوت
