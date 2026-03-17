@@ -217,40 +217,14 @@ class VideoGenerator:
             if not os.path.exists(f):
                 raise Exception(f"الملف {f} غير موجود")
         
-        # 6. إنشاء قائمة concat
-        concat_list_path = "/tmp/concat_list.txt"
-        with open(concat_list_path, 'w') as f:
-            for seg in video_segments:
-                f.write(f"file '{seg}'\n")
-        
-        merged_video = "/tmp/video_merged.mp4"
-        # استخدام concat demuxer مع إعادة الترميز
-        concat_cmd = [
-            'ffmpeg',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', concat_list_path,
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-crf', '23',
-            '-c:a', 'aac',
-            '-vf', 'format=yuv420p',
-            '-y',
-            merged_video
-        ]
-        
-        print(f"Running concat command...")
-        result = subprocess.run(concat_cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"FFmpeg stderr: {result.stderr}")
-            raise Exception(f"فشل دمج الفيديو. الكود: {result.returncode}")
-        
-        # تنظيف قائمة concat
-        os.remove(concat_list_path)
-        
+       # 6. استخراج الترجمة من الصوت
+        print("Transcribing audio with Whisper...")
+        result = self.whisper_model.transcribe(audio_file)
+        transcribed_segments = result['segments']  # ✅ تعريف المتغير بشكل صحيح
+
         # 7. إنشاء ملف ترجمة ASS
         ass_file = "/tmp/subtitles.ass"
-        self.create_ass_subtitle_file(transcribe_segments, ass_file)
+        self.create_ass_subtitle_file(transcribed_segments, ass_file)  # ✅ استخدام الاسم الصحيح
         
         # 8. إضافة الترجمة إلى الفيديو المدمج
         video_with_subs = "/tmp/video_with_subs.mp4"
