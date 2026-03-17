@@ -178,7 +178,7 @@ class VideoGenerator:
             end = min((i + 1) * segment_duration, audio_duration)
             segments.append((start, end))
         
-         # 4. إنشاء فيديو لكل مقطع (كما هو موجود)
+         # 4. إنشاء فيديو لكل مقطع (كما هو موجود مع توحيد الأسماء)
         video_segments = []
         for idx, (seg_start, seg_end) in enumerate(segments):
             seg_duration = seg_end - seg_start
@@ -202,33 +202,51 @@ class VideoGenerator:
             subprocess.run(trim_cmd, shell=True, check=True)
             
             # تغيير الحجم إلى 1080x1920
-            resized = f"/tmp/segment_{idx}.mp4"
+            resized = f"/tmp/segment_{idx}.mp4"  # اسم موحد
             resize_cmd = f'ffmpeg -i "{trimmed}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:a copy "{resized}" -y'
             subprocess.run(resize_cmd, shell=True, check=True)
             
             video_segments.append(resized)
+            
+            # تنظيف الملفات المؤقتة
             os.remove(downloaded)
             os.remove(trimmed)
         
-        # 5. دمج جميع مقاطع الفيديو باستخدام concat demuxer
-        list_file = "/tmp/concat_list.txt"
-        with open(list_file, 'w') as f:
+        # 5. التحقق من وجود جميع الملفات قبل الدمج
+        for f in video_segments:
+            if not os.path.exists(f):
+                raise Exception(f"الملف {f} غير موجود")
+        
+        # 6. إنشاء قائمة concat
+        concat_list_path = "/tmp/concat_list.txt"
+        with open(concat_list_path, 'w') as f:
             for seg in video_segments:
                 f.write(f"file '{seg}'\n")
         
         merged_video = "/tmp/video_merged.mp4"
-        # استخدام concat demuxer مع إعادة الترميز لضمان التوافق
-        concat_cmd = f'ffmpeg -f concat -safe 0 -i "{list_file}" -c:v libx264 -preset ultrafast -crf 23 -c:a aac -vf "format=yuv420p" "{merged_video}" -y'
+        # استخدام concat demuxer مع إعادة الترميز
+        concat_cmd = [
+            'ffmpeg',
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', concat_list_path,
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '23',
+            '-c:a', 'aac',
+            '-vf', 'format=yuv420p',
+            '-y',
+            merged_video
+        ]
+        
         print(f"Running concat command...")
-        result = subprocess.run(concat_cmd, shell=True, capture_output=True, text=True)
+        result = subprocess.run(concat_cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"FFmpeg stderr: {result.stderr}")
-            raise Exception(f"FFmpeg concat failed with return code {result.returncode}")
+            raise Exception(f"فشل دمج الفيديو. الكود: {result.returncode}")
         
-        # 6. استخراج الترجمة من الصوت
-        print("Transcribing audio with Whisper...")
-        result = self.whisper_model.transcribe(audio_file)
-        transcribe_segments = result['segments']
+        # تنظيف قائمة concat
+        os.remove(concat_list_path)
         
         # 7. إنشاء ملف ترجمة ASS
         ass_file = "/tmp/subtitles.ass"
