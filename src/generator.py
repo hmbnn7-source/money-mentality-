@@ -178,55 +178,61 @@ class VideoGenerator:
             end = min((i + 1) * segment_duration, audio_duration)
             segments.append((start, end))
         
-        # 4. إنشاء فيديو لكل مقطع
+      # 4. إنشاء فيديو لكل مقطع
         video_segments = []
         for idx, (seg_start, seg_end) in enumerate(segments):
             seg_duration = seg_end - seg_start
-            # البحث عن فيديو لكل مقطع (نفس كلمة البحث)
+            # البحث عن فيديو لكل مقطع
             video_url = self.search_pexels_video("city at night")
             if not video_url:
-                # إذا فشل البحث، استخدم فيديو أسود
                 print(f"Warning: No video found for segment {idx+1}, using black background")
-                segment_video = f"/tmp/segment_{idx}.mp4"
-                black_cmd = f'ffmpeg -f lavfi -i color=c=black:s=1080x1920:d={seg_duration} -c:v libx264 "{segment_video}" -y'
+                segment_file = f"/tmp/segment_{idx}.mp4"
+                black_cmd = f'ffmpeg -f lavfi -i color=c=black:s=1080x1920:d={seg_duration} -c:v libx264 "{segment_file}" -y'
                 subprocess.run(black_cmd, shell=True, check=True)
-                video_segments.append(segment_video)
+                video_segments.append(segment_file)
                 continue
             
             # تحميل الفيديو
-            downloaded_video = f"/tmp/segment_video_{idx}.mp4"
-            self.download_video(video_url, downloaded_video)
+            downloaded = f"/tmp/downloaded_{idx}.mp4"
+            self.download_video(video_url, downloaded)
             
-            # قص الفيديو ليناسب المدة المطلوبة
-            trimmed_video = f"/tmp/segment_trimmed_{idx}.mp4"
-            trim_cmd = f'ffmpeg -i "{downloaded_video}" -t {seg_duration} -c copy "{trimmed_video}" -y'
+            # قص الفيديو ليناسب المدة
+            trimmed = f"/tmp/trimmed_{idx}.mp4"
+            trim_cmd = f'ffmpeg -i "{downloaded}" -t {seg_duration} -c copy "{trimmed}" -y'
             subprocess.run(trim_cmd, shell=True, check=True)
             
             # تغيير الحجم إلى 1080x1920
-            resized_video = f"/tmp/segment_resized_{idx}.mp4"
-            resize_cmd = f'ffmpeg -i "{trimmed_video}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:a copy "{resized_video}" -y'
+            resized = f"/tmp/segment_{idx}.mp4"  # اسم موحد
+            resize_cmd = f'ffmpeg -i "{trimmed}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:a copy "{resized}" -y'
             subprocess.run(resize_cmd, shell=True, check=True)
             
-            video_segments.append(resized_video)
+            video_segments.append(resized)
             
-            # تنظيف الملفات المؤقتة لهذا المقطع
-            os.remove(downloaded_video)
-            os.remove(trimmed_video)
+            # تنظيف الملفات المؤقتة
+            os.remove(downloaded)
+            os.remove(trimmed)
         
-        # 5. دمج جميع مقاطع الفيديو باستخدام filter_complex
-        # بناء قائمة المدخلات
+        # 5. التحقق من وجود جميع الملفات قبل الدمج
+        for idx, f in enumerate(video_segments):
+            if not os.path.exists(f):
+                raise Exception(f"File {f} does not exist")
+        
+        # بناء أمر الدمج باستخدام filter_complex
         inputs = ''
         filter_inputs = []
-        for idx, v in enumerate(video_segments):
-            inputs += f'-i "{v}" '
+        for idx, f in enumerate(video_segments):
+            inputs += f'-i "{f}" '
             filter_inputs.append(f'[{idx}:v] [{idx}:a]')
         
-        # إنشاء سلسلة filter_complex لدمج جميع المقاطع
-        filter_str = f"{''.join(filter_inputs)} concat=n={len(video_segments)}:v=1:a=1 [v] [a]"
-        
+        filter_str = ''.join(filter_inputs) + f' concat=n={len(video_segments)}:v=1:a=1 [v] [a]'
         merged_video = "/tmp/video_merged.mp4"
         concat_cmd = f'ffmpeg {inputs}-filter_complex "{filter_str}" -map "[v]" -map "[a]" -c:v libx264 -preset ultrafast -crf 23 -c:a aac "{merged_video}" -y'
-        subprocess.run(concat_cmd, shell=True, check=True)
+        
+        print(f"Running concat command: {concat_cmd}")
+        result = subprocess.run(concat_cmd, shell=True, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"FFmpeg stderr: {result.stderr}")
+            raise Exception(f"FFmpeg concat failed with return code {result.returncode}")
         
         # 6. استخراج الترجمة من الصوت
         print("Transcribing audio with Whisper...")
