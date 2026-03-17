@@ -178,7 +178,7 @@ class VideoGenerator:
             end = min((i + 1) * segment_duration, audio_duration)
             segments.append((start, end))
         
-      # 4. إنشاء فيديو لكل مقطع
+         # 4. إنشاء فيديو لكل مقطع (كما هو موجود)
         video_segments = []
         for idx, (seg_start, seg_end) in enumerate(segments):
             seg_duration = seg_end - seg_start
@@ -202,33 +202,24 @@ class VideoGenerator:
             subprocess.run(trim_cmd, shell=True, check=True)
             
             # تغيير الحجم إلى 1080x1920
-            resized = f"/tmp/segment_{idx}.mp4"  # اسم موحد
+            resized = f"/tmp/segment_{idx}.mp4"
             resize_cmd = f'ffmpeg -i "{trimmed}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920" -c:a copy "{resized}" -y'
             subprocess.run(resize_cmd, shell=True, check=True)
             
             video_segments.append(resized)
-            
-            # تنظيف الملفات المؤقتة
             os.remove(downloaded)
             os.remove(trimmed)
         
-        # 5. التحقق من وجود جميع الملفات قبل الدمج
-        for idx, f in enumerate(video_segments):
-            if not os.path.exists(f):
-                raise Exception(f"File {f} does not exist")
+        # 5. دمج جميع مقاطع الفيديو باستخدام concat demuxer
+        list_file = "/tmp/concat_list.txt"
+        with open(list_file, 'w') as f:
+            for seg in video_segments:
+                f.write(f"file '{seg}'\n")
         
-        # بناء أمر الدمج باستخدام filter_complex
-        inputs = ''
-        filter_inputs = []
-        for idx, f in enumerate(video_segments):
-            inputs += f'-i "{f}" '
-            filter_inputs.append(f'[{idx}:v] [{idx}:a]')
-        
-        filter_str = ''.join(filter_inputs) + f' concat=n={len(video_segments)}:v=1:a=1 [v] [a]'
         merged_video = "/tmp/video_merged.mp4"
-        concat_cmd = f'ffmpeg {inputs}-filter_complex "{filter_str}" -map "[v]" -map "[a]" -c:v libx264 -preset ultrafast -crf 23 -c:a aac "{merged_video}" -y'
-        
-        print(f"Running concat command: {concat_cmd}")
+        # استخدام concat demuxer مع إعادة الترميز لضمان التوافق
+        concat_cmd = f'ffmpeg -f concat -safe 0 -i "{list_file}" -c:v libx264 -preset ultrafast -crf 23 -c:a aac -vf "format=yuv420p" "{merged_video}" -y'
+        print(f"Running concat command...")
         result = subprocess.run(concat_cmd, shell=True, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"FFmpeg stderr: {result.stderr}")
